@@ -1,13 +1,11 @@
 extends Resource
-
-# Internal State Class -- StateMachine depends on this definition
 class_name State
 """
 State objects used in a StateMachine.
 """
 
 # State ID
-var m_id : String setget set_id, get_id
+var m_id : String = "" setget set_id, get_id
 
 # WeakRef to object we want to manage the state of (object, node, etc)
 var m_managed_object_weakref : WeakRef = null setget set_managed_object, get_managed_object# using weakref to avoid memory leaks
@@ -19,6 +17,8 @@ var m_state_machine_weakref : WeakRef = null setget set_state_machine, get_state
 var m_process_enabled : bool = true setget set_process_enabled, is_process_enabled
 var m_physics_process_enabled : bool = true setget set_physics_process_enabled, is_physics_process_enabled
 var m_input_enabled : bool = true setget set_input_enabled, is_input_enabled
+var m_unhandled_input_enabled : bool = true setget set_unhandled_input_enabled, is_unhandled_input_enabled
+var m_gui_input_enabled : bool = true setget set_gui_input_enabled, is_gui_input_enabled
 var m_enter_state_enabled : bool = true setget set_enter_state_enabled, is_enter_state_enabled
 var m_exit_state_enabled : bool = true setget set_exit_state_enabled, is_exit_state_enabled
 
@@ -70,6 +70,22 @@ func is_input_enabled() -> bool:
 	return m_input_enabled
 
 
+func set_unhandled_input_enabled(p_value : bool) -> void:
+	m_unhandled_input_enabled = p_value
+
+
+func is_unhandled_input_enabled() -> bool:
+	return m_unhandled_input_enabled
+
+
+func set_gui_input_enabled(p_value : bool) -> void:
+	m_gui_input_enabled = p_value
+
+
+func is_gui_input_enabled() -> bool:
+	return m_gui_input_enabled
+
+
 func set_enter_state_enabled(p_value : bool) -> void:
 	m_enter_state_enabled = p_value
 
@@ -84,6 +100,13 @@ func set_exit_state_enabled(p_value : bool) -> void:
 
 func is_exit_state_enabled() -> bool:
 	return m_exit_state_enabled
+
+
+func _init():
+	# Note: State IDs MUST be unique between State subclasses, otherwise StateMachine will complain about these
+	if get_id() == "":
+		push_warning("Warning: State ID has not been set. It must be unique.")
+
 
 # State machine callback called during transition when entering this state
 func __on_enter_state(p_transition_data : Dictionary = {}) -> void:
@@ -106,3 +129,10 @@ func __physics_process(delta: float) -> void:
 func __input(event: InputEvent) -> void:
 	push_warning("Unimplemented __input(event)")
 
+
+func __unhandled_input(event: InputEvent) -> void:
+	push_warning("Unimplemented __unhandled_input(event)")
+
+
+func __gui_input(event: InputEvent) -> void:
+	push_warning("Unimplemented __gui_input(event)")
