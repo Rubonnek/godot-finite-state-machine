@@ -8,29 +8,33 @@ const ENEMY_PATROL_DISTANCE: float = 400.0
 var last_shot_time: int = 0
 var state_machine : StateMachine
 
-onready var smf = StateMachineFactory.new()
 onready var player = $"/root/World/Player"
 onready var patrol_circle = $PatrolCircle
 onready var attack_circle = $AttackCircle
 
+onready var idle_state : State = IdleState.new()
+onready var patrol_state : State = PatrolState.new()
+onready var attack_state : State = AttackState.new()
+onready var powerup_state : State = PowerUpState.new()
+
 func _ready() -> void:
-	state_machine = smf.create({
-		"managed_object": self,
-		"current_state_id": "idle",
-		"transitionable_states": [
-			{"id": "idle", "state": IdleState},
-			{"id": "patrol", "state": PatrolState},
-			{"id": "attack", "state": AttackState},
-		],
-		"stackable_states": [
-			{"id": "powerup", "state": PowerUpState},
-		],
-		"transitions": [
-			{"state_id": "idle", "to_states": ["patrol", "attack"]},
-			{"state_id": "patrol", "to_states": ["idle", "attack"]},
-			{"state_id": "attack", "to_states": ["idle", "patrol"]}
+	state_machine = StateMachine.new()
+	state_machine.set_managed_object(weakref(self))
+	state_machine.transitionable_states_ = [
+			idle_state,
+			patrol_state,
+			attack_state,
 		]
-	})
+	state_machine.stackable_states_ = [
+			powerup_state
+		]
+	state_machine.transitions_ = [
+			{"from": idle_state, "to_states": [ patrol_state, attack_state]},
+			{"from": patrol_state, "to_states": [ idle_state, attack_state]},
+			{"from": attack_state, "to_states": [ idle_state, patrol_state]}
+		]
+
+	state_machine.initialize()
 
 	# Here we setup the ranges around the unit for visual aids
 	patrol_circle.points = 64

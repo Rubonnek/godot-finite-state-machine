@@ -9,16 +9,17 @@ State Types:
 	Transitionable States - states whose instance is saved these states is saved across transitions
 """
 
+# TODO: Change all the get_id functions to get_name functions
+
 signal state_pushed(p_pushed_state)
 signal state_transitioned(p_from_state, p_to_state, p_transition_data)
 signal state_popped(p_pushed_state)
 
-export (NodePath) var managed_object_ = ""
 export (Array, Resource) var transitionable_states_ = [] # Holds externally initialized transitionable state instances
 export (Array, Resource) var stackable_states_ = [] # Holds the state class of the stackable states
 export (Array, Dictionary) var transitions_ = []
 
-var m_transitionable_instances : Array = [] # Holds the transitionable states classes used to keep track of whether or not a transition between states is valid
+var m_transitionable_states : Dictionary = {} # Holds the currently saved instances of the transitionable states referenced by their class ID
 
 # The state machine's target object, node, etc
 var m_managed_object_weakref : WeakRef = null # using weakref to avoid memory leaks due to cyclic references
@@ -31,14 +32,22 @@ var m_transitions : Dictionary = {}
 
 # Reference to the current transitionable state object
 var m_current_transitionable_state : State
+# TODO: Properly cache this value
+var m_current_transitionable_state_index : int # caching index to keep transitionable state access as O(1) in big O notation
 
-# Stack of weak reference to states instances
+# Stack of state instances currently being processed
 var m_states_stack : Array = []
 
 # Dictionary that backs up the processing state of each state on the stack
 # during freeze/unfreeze. This is so that some states can freeze the processing
 # of other states until they are done
 var m_state_stack_process_backup : Dictionary = {}
+
+func set_managed_object(p_object_weakref : WeakRef) -> void:
+	"""
+	Sets the managed object
+	"""
+	m_managed_object_weakref = p_object_weakref
 
 
 func get_managed_object() -> Object:
@@ -48,11 +57,11 @@ func get_managed_object() -> Object:
 	return m_managed_object_weakref.get_ref()
 
 
-func get_transitionable_states() -> Array:
+func get_transitionable_states() -> Dictionary:
 	"""
 	Returns the dictionary of transitionable states
 	"""
-	return m_transitionable_instances
+	return m_transitionable_states
 
 
 func get_stackable_states() -> Array:
@@ -293,13 +302,15 @@ func set_transition(p_state : State, p_to_states : Array) -> void:
 	Set valid transitions for a state. Expects state class and array of to state class.
 	If a state class does not exist in states dictionary, the transition will NOT be added.
 	"""
-	var p_state_class : GDScript = p_state.get_script()
-	if p_state_class in m_transitionable_instances:
-		if p_state_class in m_transitions:
+	if p_state.get_id() in m_transitionable_states:
+		if p_state.get_id() in m_transitions:
 			assert(false, "Overwriting transition for state with id: " + p_state.get_id())
-		m_transitions[p_state_class] = {"to_states" : p_to_states}
+		m_transitions[p_state.get_id()] = {"to_states" : p_to_states}
 	else:
-		assert(false, "Cannot set transition, invalid state: " + p_state.get_id())
+		if p_state.get_id() == "":
+			assert(false, "Cannot set transition -- state id is empty id!")
+		else:
+			assert(false, "Cannot set transition, invalid state with id: " + p_state.get_id())
 
 
 func add_transition(from_state_class : GDScript, p_to_state_class : GDScript) -> void:
@@ -307,7 +318,7 @@ func add_transition(from_state_class : GDScript, p_to_state_class : GDScript) ->
 	Add a transition for a state. This adds a single state to transitions whereas
 	set_transition is a full replace.
 	"""
-	if !(from_state_class in m_transitionable_instances) || !(p_to_state_class in m_transitionable_instances):
+	if !(from_state_class in m_transitionable_states) || !(p_to_state_class in m_transitionable_states):
 		assert(false, "Cannot add transition, one of more invalid state(s)" + 
 				"found. Either: from state \"" + from_state_class.new().get_id() + "\" or"
 				+ "to state class \"" +  p_to_state_class.new().get_id() + "\"")
@@ -323,9 +334,8 @@ func get_state(p_state_class : GDScript) -> State:
 	"""
 	Return the internal transitionable state instance from the states dictionary by state class if it exists
 	"""
-	var transitionable_state_index : int = m_transitionable_instances.find(p_state_class)
-	if transitionable_state_index != -1:
-		return m_transitionable_instances[transitionable_state_index]
+	if p_state_class in m_transitionable_states:
+		return m_transitionable_states[p_state_class]
 	else:
 		push_warning("Could not find transitionable state with state id: " + p_state_class.new().get_id())
 		return null
@@ -347,23 +357,26 @@ func set_current_transitionable_state(p_state : State) -> void:
 	"""
 	This is a 'just do it' method and does not validate transition change
 	"""
-	var p_state_class = p_state.get_script()
-	var transitionable_state_index : int = m_transitionable_instances.find(p_state_class)
-	if transitionable_state_index != -1:
+	if p_state.get_id() in m_transitionable_states:
 		if len(m_states_stack) == 0: # this is the first state we are settting the StateMachine to
-			m_current_transitionable_state = m_transitionable_instances[transitionable_state_index]
-			m_states_stack.append(m_transitionable_instances[transitionable_state_index])
+			m_current_transitionable_state = m_transitionable_states[p_state.get_id()]
+			m_states_stack.append(m_transitionable_states[p_state.get_id()])
 		else:
 			if m_current_transitionable_state:
-				transitionable_state_index = m_states_stack.find(m_current_transitionable_state)
+				var transitionable_state_index : int = m_states_stack.find(m_current_transitionable_state)
 				if transitionable_state_index != -1:
-					var target_transitionable_state : State = m_transitionable_instances[transitionable_state_index]
-					m_states_stack[transitionable_state_index] = target_transitionable_state
+					var target_transitionable_state : State = m_transitionable_states[transitionable_state_index]
+					m_states_stack[transitionable_state_index] = p_state
+					m_current_transitionable_state = p_state
+					m_current_transitionable_state_index = transitionable_state_index
 				else:
 					# There must always be one transitionable state running -- this case should not appen at all
-					assert(false, "Cannot set transitionable state! Transitionable state not found! This should not happen at all!: " + str(m_current_transitionable_state))
+					assert(false, "Cannot set transitionable state! Transitionable state not found within the states stack! This should not happen at all!: " + str(m_current_transitionable_state))
+			else:
+				assert(false, "Current transitionable state is not set but it should because the state stack has been populated!")
+
 	else:
-		assert(false, "Cannot set current state, invalid state id: " + p_state.get_id())
+		push_error("Cannot set current state -- attempted to set invalid non-registered transitionable state with id: " + p_state.get_id())
 
 
 func transition(p_state_class : GDScript, p_transition_data : Dictionary = {}) -> void:
@@ -374,7 +387,7 @@ func transition(p_state_class : GDScript, p_transition_data : Dictionary = {}) -
 	if not m_transitions.has(m_current_transitionable_state.get_id()):
 		assert(false, "No transitions defined for state %s" % m_current_transitionable_state.get_id())
 		return
-	if !p_state_class in m_transitionable_instances || !p_state_class in m_transitions[m_current_transitionable_state.get_id()]["to_states"]:
+	if !p_state_class in m_transitionable_states || !p_state_class in m_transitions[m_current_transitionable_state.get_id()]["to_states"]:
 		assert(false, "Invalid transition from %s" % m_current_transitionable_state.get_id() + " to %s" % p_state_class)
 		return
 
@@ -494,20 +507,19 @@ func initialize() -> void:
 	if len(transitionable_states_) == 0:
 		push_warning("Unable to initialize StateMachine -- there are no transtitionable states to be added")
 		return
+	if m_managed_object_weakref == null:
+		assert(false, "Unable to iniitialize without a valid managed object weakref. Did you forget to call: StateMachine.set_managed_object(weakref(object))?")
+		return
+
 	# Note: we are not checking stackable states because they are optional
-
-
-	# Set the managed object
-	m_managed_object_weakref = weakref(get(managed_object_))
-
 
 	# Initialize the transitionable states internally -- we get the class instances when we set them through the editor
 	for state_instance in transitionable_states_:
 		if state_instance:
 			# Add transitionable state to Dictionary
-			if state_instance.get_script() in m_transitionable_instances:
+			if state_instance.get_id() in m_transitionable_states:
 				assert(false, "Found class with duplicate state class \"" + state_instance.get_id() + "\" -- cannot continue")
-			m_transitionable_instances[state_instance.get_script()] = state_instance
+			m_transitionable_states[state_instance.get_id()] = state_instance
 
 			# Initialize internal state instance variables
 			state_instance.set_state_machine(weakref(self))
