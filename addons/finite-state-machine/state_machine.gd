@@ -128,13 +128,13 @@ func __push_back(p_state_id : String, p_transition_data : Dictionary = {}):
 		push_error("Cannot push invalid stackable state id \"" + p_state_id + "\" to the back of the stack: " )
 
 
-func push_front(p_state_class : GDScript, p_transition_data : Dictionary = {}) -> void:
+func push_front(p_state_id : String, p_transition_data : Dictionary = {}) -> void:
 	"""
 	Pushed state will be processed first than the rest
 	"""
 	# The stack could be getting processed when this function fires -- better
 	# to call it during idle time.
-	call_deferred("__push_front", p_state_class, p_transition_data)
+	call_deferred("__push_front", p_state_id, p_transition_data)
 
 
 func __push_front(p_state_id : String, p_transition_data : Dictionary = {}) -> void:
@@ -499,7 +499,7 @@ func unfreeze() -> void:
 	Useful for using on State.__on_exit_state when the current state has previously frozen the processing of the remaining states
 	"""
 	if len(m_state_stack_process_backup) == 0:
-		assert(false, "StateMachine has never been freezed previously! Cannot unfreeze state stack!")
+		push_warning("StateMachine has never been freezed previously! Cannot unfreeze state stack!")
 		return
 
 	for state in m_states_stack:
