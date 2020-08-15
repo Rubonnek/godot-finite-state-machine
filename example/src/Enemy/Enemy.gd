@@ -18,25 +18,23 @@ onready var attack_state : State = AttackState.new()
 onready var powerup_state : State = PowerUpState.new()
 
 func _ready() -> void:
-	state_machine = StateMachine.new()
-	state_machine.set_managed_object(weakref(self))
-	state_machine.initial_state_ = idle_state
-	state_machine.transitionable_states_ = [
+	state_machine = StateMachineFactory.create_with_dictionary({
+		"managed_object" : self,
+		"initial_state" : idle_state,
+		"transitionable_states" : [
 			idle_state,
 			patrol_state,
 			attack_state,
-		]
-	state_machine.stackable_states_ = [
-			powerup_state
-		]
-	state_machine.transitions_ = [
-			{"from": idle_state, "to_states": [ patrol_state, attack_state]},
-			{"from": patrol_state, "to_states": [ idle_state, attack_state]},
-			{"from": attack_state, "to_states": [ idle_state, patrol_state]}
-		]
-
-	# Initialize internal structures
-	state_machine.initialize()
+			],
+		"stackable_states" : [
+			powerup_state,
+			],
+		"transitions" : [
+			{"from": idle_state, "to_states": [patrol_state, attack_state]},
+			{"from": patrol_state, "to_states": [idle_state, attack_state]},
+			{"from": attack_state, "to_states": [idle_state, patrol_state]},
+			],
+		})
 
 	# Here we setup the ranges around the unit for visual aids
 	patrol_circle.points = 64
