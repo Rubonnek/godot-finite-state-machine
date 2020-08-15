@@ -14,7 +14,7 @@ func _init().():
 	m_input_enabled = false
 	m_enter_state_enabled = false
 	m_exit_state_enabled = false
-	m_id = "PatrolState"
+	m_id = "patrol"
 
 func __process(_delta: float) -> void:
 	check_for_new_patrol_direction()

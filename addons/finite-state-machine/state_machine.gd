@@ -15,6 +15,7 @@ signal state_pushed(p_pushed_state)
 signal state_transitioned(p_from_state, p_to_state, p_transition_data)
 signal state_popped(p_pushed_state)
 
+export (Resource) var initial_state_ = null # Holds externally initialized transitionable state instances
 export (Array, Resource) var transitionable_states_ = [] # Holds externally initialized transitionable state instances
 export (Array, Resource) var stackable_states_ = [] # Holds the state class of the stackable states
 export (Array, Dictionary) var transitions_ = []
@@ -25,7 +26,7 @@ var m_transitionable_states : Dictionary = {} # Holds the currently saved instan
 var m_managed_object_weakref : WeakRef = null # using weakref to avoid memory leaks due to cyclic references
 
 # Classes to make it easy to create new objects, and also to track if we are including more than one of the same classes by mistake
-var m_stackable_classes : Array = [] # Holds a reference of the state class which is map to its state class contained in a GDScript object
+var m_stackable_classes : Dictionary = {} # Holds a reference of the state class which is map to its state class contained in a GDScript object
 
 # Dictionary of valid state transitions
 var m_transitions : Dictionary = {}
@@ -36,6 +37,10 @@ var m_current_transitionable_state : State
 var m_current_transitionable_state_index : int # caching index to keep transitionable state access as O(1) in big O notation
 
 # Stack of state instances currently being processed
+# TODO: In order to enhance push_unique/pop_unique performance, a dictionary
+# that keeps track of what state IDs are on the stack and how many of them
+# there are is useful -- implementing this should be trivial, but for now this
+# performance is not needed.
 var m_states_stack : Array = []
 
 # Dictionary that backs up the processing state of each state on the stack
@@ -71,7 +76,7 @@ func get_stackable_states() -> Array:
 	return stackable_states_
 
 
-func get_state_classes() -> Array:
+func get_state_classes() -> Dictionary:
 	"""
 	Returns the dictionary of stackable states
 	"""
@@ -92,19 +97,19 @@ func get_transitions() -> Dictionary:
 	return m_transitions
 
 
-func push(p_state_class : GDScript, p_transition_data : Dictionary = {}) -> void:
+func push(p_state_id : String, p_transition_data : Dictionary = {}) -> void:
 	"""
 	Guarantees state processing order is not modified
 	Pushed stackable state will be processed last than the rest
 	"""
 	# The stack could be getting processed when this function fires -- better
 	# to call it during idle time.
-	call_deferred("__push_back", p_state_class, p_transition_data)
+	call_deferred("__push_back", p_state_id, p_transition_data)
 
 
-func __push_back(p_state_class : GDScript, p_transition_data : Dictionary = {}):
-	if p_state_class in stackable_states_:
-		var p_state : State = __create_state(p_state_class)
+func __push_back(p_state_id : String, p_transition_data : Dictionary = {}):
+	if p_state_id in m_stackable_classes:
+		var p_state : State = __create_state(p_state_id)
 
 		if p_state.m_enter_state_enabled:
 			p_state.__on_enter_state(p_transition_data)
@@ -112,7 +117,7 @@ func __push_back(p_state_class : GDScript, p_transition_data : Dictionary = {}):
 		m_states_stack.push_back(p_state)
 		emit_signal("state_pushed", p_state)
 	else:
-		push_error("Cannot push invalid stackable state id \"" + p_state_class.instance().get_id() + "\" to the back of the stack: " )
+		push_error("Cannot push invalid stackable state id \"" + p_state_id + "\" to the back of the stack: " )
 
 
 func push_front(p_state_class : GDScript, p_transition_data : Dictionary = {}) -> void:
@@ -124,9 +129,9 @@ func push_front(p_state_class : GDScript, p_transition_data : Dictionary = {}) -
 	call_deferred("__push_front", p_state_class, p_transition_data)
 
 
-func __push_front(p_state_class : GDScript, p_transition_data : Dictionary = {}) -> void:
-	if p_state_class in stackable_states_:
-		var p_state : State = __create_state(p_state_class)
+func __push_front(p_state_id : String, p_transition_data : Dictionary = {}) -> void:
+	if p_state_id in stackable_states_:
+		var p_state : State = __create_state(p_state_id)
 
 		if p_state.m_enter_state_enabled:
 			p_state.__on_enter_state(p_transition_data)
@@ -134,27 +139,27 @@ func __push_front(p_state_class : GDScript, p_transition_data : Dictionary = {})
 		m_states_stack.push_front(p_state)
 		emit_signal("state_pushed", p_state)
 	else:
-		push_error("Cannot push invalid stackable state to the front of the stack: " + str(p_state_class))
+		push_error("Cannot push invalid stackable state to the front of the stack: " + str(p_state_id))
 
 
-func push_unique(p_state_class : GDScript, p_transition_data : Dictionary = {}) -> void:
+func push_unique(p_state_id : String, p_transition_data : Dictionary = {}) -> void:
 	"""
 	Guarantees state processing order is not modified - state will be processed last
 	If a previous state with the same ID exists, it will not be added to the stack
 	"""
 	# The stack could be getting processed when this function fires -- better
 	# to call it during idle time.
-	call_deferred("__push_back_unique", p_state_class, p_transition_data)
+	call_deferred("__push_back_unique", p_state_id, p_transition_data)
 
 
-func __push_back_unique(p_state_class : GDScript, p_transition_data : Dictionary = {}) -> void:
-	if p_state_class in stackable_states_:
+func __push_back_unique(p_state_id : String, p_transition_data : Dictionary = {}) -> void:
+	if p_state_id in m_stackable_classes:
 		for state in m_states_stack:
-			if state.get_id() == p_state_class:
-				push_warning("State ID \"" + p_state_class.new().get_id() + "\" is already being processed on the stack. Skipping...")
+			if state.get_id() == p_state_id:
+				push_warning("State ID \"" + p_state_id + "\" is already being processed on the stack. Skipping...")
 				return
 
-		var p_state : State = __create_state(p_state_class)
+		var p_state : State = __create_state(p_state_id)
 
 		if p_state.m_enter_state_enabled:
 			p_state.__on_enter_state(p_transition_data)
@@ -162,7 +167,7 @@ func __push_back_unique(p_state_class : GDScript, p_transition_data : Dictionary
 		m_states_stack.push_back(p_state)
 		emit_signal("state_pushed", p_state)
 	else:
-		push_error("Cannot push invalid state with id \"" + p_state_class.new().get_id() + "\"to the back of the stack: ")
+		push_error("Cannot push invalid state with id \"" + p_state_id + "\"to the back of the stack: ")
 
 
 func push_front_unique(p_state_class : GDScript, p_transition_data : Dictionary = {}) -> void:
@@ -175,14 +180,14 @@ func push_front_unique(p_state_class : GDScript, p_transition_data : Dictionary 
 	call_deferred("__push_front_unique", p_state_class, p_transition_data)
 
 
-func __push_front_unique(p_state_class : GDScript, p_transition_data : Dictionary = {}) -> void:
-	if p_state_class in stackable_states_:
+func __push_front_unique(p_state_id : String, p_transition_data : Dictionary = {}) -> void:
+	if p_state_id in m_stackable_classes:
 		for state in m_states_stack:
-			if state.get_id() == p_state_class:
-				push_warning("State ID \"" + p_state_class.new().get_id() + "\" is already being processed on the stack. Skipping...")
+			if state.get_id() == p_state_id:
+				push_warning("State ID \"" + p_state_id + "\" is already being processed on the stack. Skipping...")
 				return
 
-		var p_state : State = __create_state(p_state_class)
+		var p_state : State = __create_state(p_state_id)
 
 		if p_state.m_enter_state_enabled:
 			p_state.__on_enter_state(p_transition_data)
@@ -190,7 +195,7 @@ func __push_front_unique(p_state_class : GDScript, p_transition_data : Dictionar
 		m_states_stack.push_front(p_state)
 		emit_signal("state_pushed", p_state)
 	else:
-		push_error("Cannot push invalid stackable state with id \"" + p_state_class.new().get_id() + "\"to the front of the stack")
+		push_error("Cannot push invalid stackable state with id \"" + p_state_id + "\"to the front of the stack")
 
 
 func pop() -> void:
@@ -305,7 +310,11 @@ func set_transition(p_state : State, p_to_states : Array) -> void:
 	if p_state.get_id() in m_transitionable_states:
 		if p_state.get_id() in m_transitions:
 			assert(false, "Overwriting transition for state with id: " + p_state.get_id())
-		m_transitions[p_state.get_id()] = {"to_states" : p_to_states}
+		# Need to convert from states to 
+		var state_id_array : Array
+		for state in p_to_states:
+			state_id_array.push_back(state.get_id())
+		m_transitions[p_state.get_id()] = {"to_states" : state_id_array}
 	else:
 		if p_state.get_id() == "":
 			assert(false, "Cannot set transition -- state id is empty id!")
@@ -330,14 +339,14 @@ func add_transition(from_state_class : GDScript, p_to_state_class : GDScript) ->
 		m_transitions[from_state_class] = {"to_states": [p_to_state_class]}
 
 
-func get_state(p_state_class : GDScript) -> State:
+func get_state(p_state_id : String) -> State:
 	"""
 	Return the internal transitionable state instance from the states dictionary by state class if it exists
 	"""
-	if p_state_class in m_transitionable_states:
-		return m_transitionable_states[p_state_class]
+	if p_state_id in m_transitionable_states:
+		return m_transitionable_states[p_state_id]
 	else:
-		push_warning("Could not find transitionable state with state id: " + p_state_class.new().get_id())
+		push_warning("Could not find transitionable state with state id: " + p_state_id)
 		return null
 
 
@@ -357,18 +366,18 @@ func set_current_transitionable_state(p_state : State) -> void:
 	"""
 	This is a 'just do it' method and does not validate transition change
 	"""
+	print("Sate gogten: " + str(p_state))
 	if p_state.get_id() in m_transitionable_states:
 		if len(m_states_stack) == 0: # this is the first state we are settting the StateMachine to
 			m_current_transitionable_state = m_transitionable_states[p_state.get_id()]
 			m_states_stack.append(m_transitionable_states[p_state.get_id()])
 		else:
 			if m_current_transitionable_state:
-				var transitionable_state_index : int = m_states_stack.find(m_current_transitionable_state)
-				if transitionable_state_index != -1:
-					var target_transitionable_state : State = m_transitionable_states[transitionable_state_index]
-					m_states_stack[transitionable_state_index] = p_state
+				var current_state_index : int = m_states_stack.find(m_current_transitionable_state)
+				if current_state_index != -1:
+					m_states_stack[current_state_index] = p_state
 					m_current_transitionable_state = p_state
-					m_current_transitionable_state_index = transitionable_state_index
+					m_current_transitionable_state_index = current_state_index
 				else:
 					# There must always be one transitionable state running -- this case should not appen at all
 					assert(false, "Cannot set transitionable state! Transitionable state not found within the states stack! This should not happen at all!: " + str(m_current_transitionable_state))
@@ -379,20 +388,18 @@ func set_current_transitionable_state(p_state : State) -> void:
 		push_error("Cannot set current state -- attempted to set invalid non-registered transitionable state with id: " + p_state.get_id())
 
 
-func transition(p_state_class : GDScript, p_transition_data : Dictionary = {}) -> void:
+func transition(p_state_id : String, p_transition_data : Dictionary = {}) -> void:
 	"""
 	Transition to new state by state class.
 	Callbacks will be called on the from and to states if the states have implemented them.
 	"""
 	if not m_transitions.has(m_current_transitionable_state.get_id()):
 		assert(false, "No transitions defined for state %s" % m_current_transitionable_state.get_id())
-		return
-	if !p_state_class in m_transitionable_states || !p_state_class in m_transitions[m_current_transitionable_state.get_id()]["to_states"]:
-		assert(false, "Invalid transition from %s" % m_current_transitionable_state.get_id() + " to %s" % p_state_class)
-		return
+	if !p_state_id in m_transitionable_states || !p_state_id in m_transitions[m_current_transitionable_state.get_id()]["to_states"]:
+		assert(false, "Invalid transition from %s" % m_current_transitionable_state.get_id() + " to %s" % p_state_id)
 
 	var from_state : State = m_current_transitionable_state
-	var to_state : State = get_state(p_state_class)
+	var to_state : State = get_state(p_state_id)
 
 	if from_state.m_exit_state_enabled:
 		from_state.__on_exit_state()
@@ -537,10 +544,10 @@ func initialize() -> void:
 	# Set Stackable Instances
 	for state_instance in stackable_states_:
 		var state_class = state_instance.get_script()
-		if state_instance.get_script() in m_stackable_classes:
+		if state_instance.get_id() in m_stackable_classes:
 			assert(false, "State with id \"" + state_instance.new().state_instance.get_id() + "\" is getting overwritten on m_stackable_classes. This is unsupported.")
 		# We only need to keep track of the stackable state class, not the instance itself
-		m_stackable_classes.push_back(state_class)
+		m_stackable_classes[state_instance.get_id()] = state_class
 	# No need to hold these instances anymore -- clear memory
 	stackable_states_.clear()
 
@@ -548,18 +555,22 @@ func initialize() -> void:
 	# Set Transitions
 	for transition_dictionary in transitions_:
 		set_transition(transition_dictionary["from"], transition_dictionary["to_states"])
+	
+	# Finally set initial transitionable state
+	set_current_transitionable_state(initial_state_)
+	
 
 
 # Private Functions
-func __create_state(p_state_class : GDScript) -> State:
-	if !(p_state_class in m_stackable_classes):
-		assert(false, "State with id \"" + p_state_class.new().get_id() + "\" is not a stackable state")
-	var new_state = p_state_class.new()
+func __create_state(p_state_id : String) -> State:
+	if !(p_state_id in m_stackable_classes):
+		assert(false, "State with id \"" + p_state_id + "\" is not a stackable state")
+	var new_state = m_stackable_classes[p_state_id].new()
 	new_state.set_state_machine(weakref(self))
 	if m_managed_object_weakref:
 		new_state.set_managed_object(m_managed_object_weakref)
 	else:
-		assert(false, "Could not set managed object on created state class with id: " + p_state_class.new().get_id())
+		assert(false, "Could not set managed object on created state class with id: " + p_state_id)
 	return new_state
 
 func _init():

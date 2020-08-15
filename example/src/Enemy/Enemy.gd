@@ -20,6 +20,7 @@ onready var powerup_state : State = PowerUpState.new()
 func _ready() -> void:
 	state_machine = StateMachine.new()
 	state_machine.set_managed_object(weakref(self))
+	state_machine.initial_state_ = idle_state
 	state_machine.transitionable_states_ = [
 			idle_state,
 			patrol_state,
@@ -34,7 +35,9 @@ func _ready() -> void:
 			{"from": attack_state, "to_states": [ idle_state, patrol_state]}
 		]
 
+	# Initialize internal structures
 	state_machine.initialize()
+	print(state_machine.get_transitions())
 
 	# Here we setup the ranges around the unit for visual aids
 	patrol_circle.points = 64

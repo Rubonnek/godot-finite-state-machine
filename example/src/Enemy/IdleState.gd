@@ -5,7 +5,7 @@ class_name IdleState
 func _init().():
 	m_physics_process_enabled = false
 	m_input_enabled = false
-	m_id = "IdleState"
+	m_id = "idle"
 
 func __process(_delta: float) -> void:
 	# Start patrolling when the player gets closer to us
