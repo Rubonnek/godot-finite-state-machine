@@ -9,7 +9,7 @@ var original_scale : Vector2
 func _init().():
 	m_physics_process_enabled = false
 	m_input_enabled = false
-	m_id = "powerup"
+	resource_name = "powerup"
 
 func __process(delta: float) -> void:
 	time_passed += delta

@@ -5,7 +5,7 @@ class_name AttackState
 func _init().():
 	m_physics_process_enabled = false
 	m_input_enabled = false
-	m_id = "attack"
+	resource_name = "attack"
 
 func __process(_delta: float) -> void:
 	if not m_managed_object_weakref.get_ref().has_enemies():

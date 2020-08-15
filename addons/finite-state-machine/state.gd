@@ -4,9 +4,6 @@ class_name State
 State objects used in a StateMachine.
 """
 
-# State ID
-var m_id : String = "" setget set_id, get_id
-
 # WeakRef to object we want to manage the state of (object, node, etc)
 var m_managed_object_weakref : WeakRef = null setget set_managed_object, get_managed_object# using weakref to avoid memory leaks
 
@@ -21,13 +18,6 @@ var m_unhandled_input_enabled : bool = true setget set_unhandled_input_enabled, 
 var m_gui_input_enabled : bool = true setget set_gui_input_enabled, is_gui_input_enabled
 var m_enter_state_enabled : bool = true setget set_enter_state_enabled, is_enter_state_enabled
 var m_exit_state_enabled : bool = true setget set_exit_state_enabled, is_exit_state_enabled
-
-func set_id(p_id : String) -> void:
-	m_id = p_id
-
-
-func get_id() -> String:
-	return m_id
 
 
 func set_managed_object(p_managed_object : WeakRef) -> void:
