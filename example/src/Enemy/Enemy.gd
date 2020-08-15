@@ -37,7 +37,6 @@ func _ready() -> void:
 
 	# Initialize internal structures
 	state_machine.initialize()
-	print(state_machine.get_transitions())
 
 	# Here we setup the ranges around the unit for visual aids
 	patrol_circle.points = 64

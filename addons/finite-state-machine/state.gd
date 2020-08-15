@@ -102,12 +102,6 @@ func is_exit_state_enabled() -> bool:
 	return m_exit_state_enabled
 
 
-func _init():
-	# Note: State IDs MUST be unique between State subclasses, otherwise StateMachine will complain about these
-	if get_id() == "":
-		push_warning("Warning: State ID has not been set. It must be unique.")
-
-
 # State machine callback called during transition when entering this state
 func __on_enter_state(p_transition_data : Dictionary = {}) -> void:
 	push_warning("Unimplemented __on_enter_state")

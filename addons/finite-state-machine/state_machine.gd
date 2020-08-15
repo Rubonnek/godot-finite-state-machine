@@ -33,15 +33,23 @@ var m_transitions : Dictionary = {}
 
 # Reference to the current transitionable state object
 var m_current_transitionable_state : State
-# TODO: Properly cache this value
-var m_current_transitionable_state_index : int # caching index to keep transitionable state access as O(1) in big O notation
 
-# Stack of state instances currently being processed
+# TODO: Pushing stackable states to the front (with push_front) for processing
+# will affect the position of the transitionable state on the stack which, when
+# transitioning over to a new state, increases the complexity of changing
+# transition from O(1) to O(n).  In order to keep the state transition change
+# at complexity O(1), we could track the current transitionable state index on
+# the stack but this would also mean properly implementing a StackableState
+# class. I don't think the performance enhancement will be needed, so I'm just
+# going to kepe this class as-is.
+#var m_current_transitionable_state_index : int
+
+# Stack of state instances currently being processed:
+var m_states_stack : Array = []
 # TODO: In order to enhance push_unique/pop_unique performance, a dictionary
 # that keeps track of what state IDs are on the stack and how many of them
 # there are is useful -- implementing this should be trivial, but for now this
-# performance is not needed.
-var m_states_stack : Array = []
+# performance enhancement is not needed and may never be.
 
 # Dictionary that backs up the processing state of each state on the stack
 # during freeze/unfreeze. This is so that some states can freeze the processing
@@ -69,11 +77,11 @@ func get_transitionable_states() -> Dictionary:
 	return m_transitionable_states
 
 
-func get_stackable_states() -> Array:
+func get_stackable_classes() -> Dictionary:
 	"""
 	Returns the array of stackable states
 	"""
-	return stackable_states_
+	return m_stackable_classes
 
 
 func get_state_classes() -> Dictionary:
@@ -364,20 +372,22 @@ func get_transition(p_state_class : GDScript) -> Dictionary:
 
 func set_current_transitionable_state(p_state : State) -> void:
 	"""
-	This is a 'just do it' method and does not validate transition change
+	This is a 'just do it' method and does not validate transition change. It's
+	important to point out that p_state should NOT be inserted directly into
+	the state stack because the State instance we may get here may not be the
+	same as the one stored within m_transitionable_states.
 	"""
-	print("Sate gogten: " + str(p_state))
 	if p_state.get_id() in m_transitionable_states:
 		if len(m_states_stack) == 0: # this is the first state we are settting the StateMachine to
 			m_current_transitionable_state = m_transitionable_states[p_state.get_id()]
-			m_states_stack.append(m_transitionable_states[p_state.get_id()])
+			m_states_stack.append(m_current_transitionable_state)
 		else:
 			if m_current_transitionable_state:
 				var current_state_index : int = m_states_stack.find(m_current_transitionable_state)
 				if current_state_index != -1:
-					m_states_stack[current_state_index] = p_state
-					m_current_transitionable_state = p_state
-					m_current_transitionable_state_index = current_state_index
+					m_states_stack[current_state_index] = m_transitionable_states[p_state.get_id()]
+					m_current_transitionable_state = m_transitionable_states[p_state.get_id()]
+					#m_current_transitionable_state_index = current_state_index
 				else:
 					# There must always be one transitionable state running -- this case should not appen at all
 					assert(false, "Cannot set transitionable state! Transitionable state not found within the states stack! This should not happen at all!: " + str(m_current_transitionable_state))
